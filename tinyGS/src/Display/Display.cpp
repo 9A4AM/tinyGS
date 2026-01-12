@@ -21,6 +21,7 @@
 #include "graphics.h"
 #include "../ConfigManager/ConfigManager.h"
 #include "../Mqtt/MQTT_credentials.h"
+#include "../Logger/Logger.h"
 
 SSD1306* display;
 OLEDDisplayUi* ui = NULL;
@@ -98,7 +99,7 @@ void msOverlay(OLEDDisplay *display, OLEDDisplayUiState* state)
   time_t currenttime = time (NULL);
   if(currenttime < 0)
   {
-    Serial.println("Failed to obtain time");
+    Log::error(PSTR("Failed to obtain time"));
     return;
   }
   timeinfo = localtime (&currenttime);

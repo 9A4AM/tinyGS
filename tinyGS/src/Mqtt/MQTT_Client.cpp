@@ -37,6 +37,7 @@ MQTT_Client::MQTT_Client()
 espClient.setCACert(newRoot_CA);
 #endif
   randomTime = random(randomTimeMax - randomTimeMin) + randomTimeMin;
+  radioConfigMutex = xSemaphoreCreateMutex();
 }
 
 void MQTT_Client::loop()
@@ -46,7 +47,7 @@ void MQTT_Client::loop()
     status.mqtt_connected = false;
     if (millis() - lastConnectionAtempt > reconnectionInterval * connectionAtempts + randomTime)
     {
-      Serial.println(randomTime);
+      Log::debug(PSTR("Random reconnection delay: %lu ms"), randomTime);
       lastConnectionAtempt = millis();
       connectionAtempts++;
 
@@ -396,7 +397,7 @@ void MQTT_Client::manageMQTTData(char *topic, uint8_t *payload, unsigned int len
 
   if (!strcmp(command, commandWeblogin))
   {
-    Log::console(PSTR("Weblogin: %.*s"), length, payload);
+    Log::consoleAsync(PSTR("Weblogin: %.*s"), length, payload);
     return; // no ack
   }
 
@@ -441,14 +442,24 @@ void MQTT_Client::manageMQTTData(char *topic, uint8_t *payload, unsigned int len
     char logStr[length + 1];
     memcpy(logStr, payload, length);
     logStr[length] = '\0';
-    Log::console(PSTR("%s"), logStr);
+    Log::consoleAsync(PSTR("%s"), logStr);
     return; // do not send ack for this one
   }
 
   if (!strcmp(command, commandTx))
   {
+    // Acquire mutex with longer timeout for TX operations
+    if (xSemaphoreTake(radioConfigMutex, pdMS_TO_TICKS(5000)) != pdTRUE)
+    {
+      Log::consoleAsync(PSTR("ERROR: Could not acquire radio config mutex for TX"));
+      return;
+    }
+    
     result = radio.sendTx(payload, length);
-    Log::console(PSTR("Sending TX packet!"));
+    Log::consoleAsync(PSTR("Sending TX packet!"));
+    
+    // Release mutex after transmission
+    xSemaphoreGive(radioConfigMutex);
   }
 
   // ######################################################
@@ -470,7 +481,7 @@ void MQTT_Client::manageMQTTData(char *topic, uint8_t *payload, unsigned int len
 
     if (error.code() != DeserializationError::Ok || !doc.containsKey("mode"))
     {
-      Log::console(PSTR("ERROR: Your modem config is invalid. Resetting to default"));
+      Log::consoleAsync(PSTR("ERROR: Your modem config is invalid. Resetting to default"));
       return;
     }
 
@@ -481,7 +492,7 @@ void MQTT_Client::manageMQTTData(char *topic, uint8_t *payload, unsigned int len
     
     if (!isValidFrequency(board.L_radio, doc["freq"]))
     {
-      Log::console(PSTR("ERROR: Invalid frequency. Ignoring."));
+      Log::consoleAsync(PSTR("ERROR: Invalid frequency. Ignoring."));
       return;
     }
     ModemInfo &m = status.modeminfo;
@@ -498,7 +509,7 @@ void MQTT_Client::manageMQTTData(char *topic, uint8_t *payload, unsigned int len
 
     if (error.code() != DeserializationError::Ok || !doc.containsKey("mode"))
     {
-      Log::console(PSTR("ERROR: The received modem configuration is invalid. Ignoring."));
+      Log::consoleAsync(PSTR("ERROR: The received modem configuration is invalid. Ignoring."));
       return;
     }
 
@@ -509,10 +520,17 @@ void MQTT_Client::manageMQTTData(char *topic, uint8_t *payload, unsigned int len
     
     if (!isValidFrequency(board.L_radio, doc["freq"]))
     {
-      Log::console(PSTR("ERROR: Invalid frequency. Ignoring."));
+      Log::consoleAsync(PSTR("ERROR: Invalid frequency. Ignoring."));
       return;
     }
  
+    // Acquire mutex to protect radio configuration from race conditions
+    if (xSemaphoreTake(radioConfigMutex, pdMS_TO_TICKS(1000)) != pdTRUE)
+    {
+      Log::consoleAsync(PSTR("ERROR: Could not acquire radio config mutex"));
+      return;
+    }
+
     // disable interrup to avoid allocating received packet to the wrong satellite.
     radio.clearPacketReceivedAction();
     radio.disableInterrupt();
@@ -627,6 +645,9 @@ void MQTT_Client::manageMQTTData(char *topic, uint8_t *payload, unsigned int len
   radio.begin();
   
   radio.enableInterrupt();
+  
+  // Release mutex after radio configuration is complete
+  xSemaphoreGive(radioConfigMutex);
 //    radio.currentRssi();
     result = 0;
   }
@@ -777,8 +798,7 @@ void MQTT_Client::manageSetName(char *payload, size_t payload_len)
   DeserializationError error = deserializeJson(doc, payload, payload_len);
 
   if (error) {
-    Serial.print(F("deserializeJson() failed: "));
-    Serial.println(error.c_str());
+    Log::error(PSTR("deserializeJson() failed: %s"), error.c_str());
     return;
   }
 
@@ -936,7 +956,7 @@ void MQTT_Client::remoteGoToSiesta(char *payload, size_t payload_len)
 // Helper class to use as a callback
 void manageMQTTDataCallback(char *topic, uint8_t *payload, unsigned int length)
 {
-  Log::debug(PSTR("Received MQTT message: %s : %.*s"), topic, length, payload);
+  Log::debugAsync(PSTR("Received MQTT message: %s : %.*s"), topic, length, payload);
   MQTT_Client::getInstance().manageMQTTData(topic, payload, length);
 }
 
@@ -954,7 +974,7 @@ int MQTT_Client::voltage() {
   int length = 21;
   int voltages[22];
   
-  for (int i = 0; i < 22; i++)
+  for (int i = 0; i < 21; i++)
   {
     voltages[i] = analogRead(36); 
     }

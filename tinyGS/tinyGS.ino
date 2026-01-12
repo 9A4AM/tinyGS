@@ -143,6 +143,10 @@ void setup()
 #endif
   Serial.begin(115200);
   delay (100);
+  
+  // Initialize async logging early
+  Log::initAsync();
+  
   improvWiFi.setVersion (status.version);
   Log::console (PSTR ("TinyGS Version %d - %s"), status.version, status.git_version);
   Log::console(PSTR("Chip  %s - %d"),  ESP.getChipModel(),ESP.getChipRevision());

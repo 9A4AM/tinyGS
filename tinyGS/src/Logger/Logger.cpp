@@ -23,6 +23,129 @@
 char Log::logIdx = 1;
 Log::LoggingLevels Log::logLevel = LOG_LEVEL;
 char Log::log[MAX_LOG_SIZE] = "";
+QueueHandle_t Log::logQueue = nullptr;
+TaskHandle_t Log::logTask = nullptr;
+bool Log::asyncEnabled = false;
+
+void Log::initAsync()
+{
+  if (asyncEnabled) return;
+  
+  logQueue = xQueueCreate(LOG_QUEUE_SIZE, sizeof(LogMessage));
+  if (logQueue == nullptr) {
+    // Cannot use Log::console here as we're initializing the async system
+    // Fall back to direct serial for critical init errors
+    return;
+  }
+  
+  BaseType_t result = xTaskCreate(
+    logTaskFunction,
+    "LogTask",
+    4096,  // Stack size
+    nullptr,
+    1,     // Low priority (tskIDLE_PRIORITY + 1)
+    &logTask
+  );
+  
+  if (result != pdPASS) {
+    // Cannot use Log::console here as we're initializing the async system
+    vQueueDelete(logQueue);
+    logQueue = nullptr;
+    return;
+  }
+  
+  asyncEnabled = true;
+  // Successfully initialized async logging
+}
+
+void Log::logTaskFunction(void* parameter)
+{
+  LogMessage msg;
+  while (true) {
+    if (xQueueReceive(logQueue, &msg, portMAX_DELAY) == pdTRUE) {
+      // Process the log message (can block here)
+      AddLog(msg.level, msg.message);
+    }
+  }
+}
+
+void Log::consoleAsync(const char* formatP, ...)
+{
+  if (!asyncEnabled) {
+    // Fallback to synchronous logging
+    va_list arg;
+    char buffer[256];
+    va_start(arg, formatP);
+    vsnprintf_P(buffer, sizeof(buffer), formatP, arg);
+    va_end(arg);
+    AddLog(LOG_LEVEL_NONE, buffer);
+    return;
+  }
+  
+  LogMessage msg;
+  va_list arg;
+  va_start(arg, formatP);
+  vsnprintf_P(msg.message, sizeof(msg.message), formatP, arg);
+  va_end(arg);
+  msg.level = LOG_LEVEL_NONE;
+  
+  // Non-blocking send - if queue is full, drop the message
+  if (xQueueSend(logQueue, &msg, 0) != pdTRUE) {
+    // Queue full - message dropped (silent failure to avoid recursion)
+  }
+}
+
+void Log::errorAsync(const char* formatP, ...)
+{
+  if (!asyncEnabled) {
+    // Fallback to synchronous logging
+    va_list arg;
+    char buffer[256];
+    va_start(arg, formatP);
+    vsnprintf_P(buffer, sizeof(buffer), formatP, arg);
+    va_end(arg);
+    AddLog(LOG_LEVEL_ERROR, buffer);
+    return;
+  }
+  
+  LogMessage msg;
+  va_list arg;
+  va_start(arg, formatP);
+  vsnprintf_P(msg.message, sizeof(msg.message), formatP, arg);
+  va_end(arg);
+  msg.level = LOG_LEVEL_ERROR;
+  
+  // Non-blocking send - if queue is full, drop the message
+  if (xQueueSend(logQueue, &msg, 0) != pdTRUE) {
+    // Queue full - message dropped
+  }
+}
+
+void Log::debugAsync(const char* formatP, ...)
+{
+  if (!asyncEnabled) {
+    // Fallback to synchronous logging
+    va_list arg;
+    char buffer[321];
+    va_start(arg, formatP);
+    vsnprintf_P(buffer, sizeof(buffer), formatP, arg);
+    va_end(arg);
+    AddLog(LOG_LEVEL_DEBUG, buffer);
+    return;
+  }
+  
+  LogMessage msg;
+  va_list arg;
+  va_start(arg, formatP);
+  vsnprintf_P(msg.message, sizeof(msg.message), formatP, arg);
+  va_end(arg);
+  msg.level = LOG_LEVEL_DEBUG;
+  
+  // Non-blocking send - if queue is full, drop the message
+  if (xQueueSend(logQueue, &msg, 0) != pdTRUE) {
+    // Queue full - message dropped
+  }
+}
 
 void Log::console(const char* formatP, ...)
 {
@@ -152,7 +275,7 @@ void Log::log_packet(uint8_t *packet, size_t size){
   char* cadena = new char[longLinea+1];
   char* ascii = new char[bytes_per_line+1];
   int j=0; int k=0;
-  Log::console(PSTR("-----------------------------------------------------------------"));
+  Log::consoleAsync(PSTR("-----------------------------------------------------------------"));
   for (int i=0;i<size;i++){
       j=3*(i%bytes_per_line); //Index for the Hex Data
       k=(i%bytes_per_line); //Index for the ASCII Data
@@ -182,12 +305,12 @@ void Log::log_packet(uint8_t *packet, size_t size){
         cadena[longLinea]=0;
         ascii[bytes_per_line]=0;
         //Final Data/ASCII Line print on screen
-        Log::console(PSTR("%s %s"),cadena,ascii);
+        Log::consoleAsync(PSTR("%s %s"),cadena,ascii);
         cadena[0]=0;
         ascii[0]=0;
         }
   }
-  Log::console(PSTR("-----------------------------------------------------------------"));
+  Log::consoleAsync(PSTR("-----------------------------------------------------------------"));
 }
 
 void Log::log_packet_hex(uint8_t *packet, size_t size){
@@ -215,11 +338,11 @@ void Log::log_packet_hex(uint8_t *packet, size_t size){
         }
         cadena[longLinea]=0;
         //Final Data Line print on screen
-        Log::console(PSTR("%s"),cadena);
+        Log::consoleAsync(PSTR("%s"),cadena);
         cadena[0]=0;
         }
   }
-  Log::console(PSTR(" "));
+  Log::consoleAsync(PSTR(" "));
 }
 
 void Log::log_packet_ax25(uint8_t *packet, size_t size){
@@ -260,8 +383,8 @@ void Log::log_packet_ax25(uint8_t *packet, size_t size){
       sprintf(ascii + i, "%c", 32);
     }
   }
-  Log::console(PSTR("------------------------- AX.25 HEADER --------------------------"));
-  Log::console(PSTR("%02X %02X %02X %02X %02X %02X %02X | Destination Address.....: %s  SSID: %i")
+  Log::consoleAsync(PSTR("------------------------- AX.25 HEADER --------------------------"));
+  Log::consoleAsync(PSTR("%02X %02X %02X %02X %02X %02X %02X | Destination Address.....: %s  SSID: %i")
                      ,packet[0],packet[1],packet[2],packet[3],packet[4],packet[5],packet[6]
                      ,ascii,(packet[6]&(0x1E))>>1);
   ascii[0]=0;
@@ -276,14 +399,14 @@ void Log::log_packet_ax25(uint8_t *packet, size_t size){
      sprintf(ascii + i-7, "%c", 32);
     }
   }
-  Log::console(PSTR("%02X %02X %02X %02X %02X %02X %02X | Source Address..........: %s  SSID: %i")
+  Log::consoleAsync(PSTR("%02X %02X %02X %02X %02X %02X %02X | Source Address..........: %s  SSID: %i")
                      ,packet[7],packet[8],packet[9],packet[10],packet[11],packet[12],packet[13]
                      ,ascii,(packet[13]&(0x1E))>>1);
   ascii[0]=0;
   //1 byte  Control
-  Log::console(PSTR("%02X                   | Control.................: %03i"),packet[14],packet[14]);
+  Log::consoleAsync(PSTR("%02X                   | Control.................: %03i"),packet[14],packet[14]);
   //1 byte  PID
-  Log::console(PSTR("%02X                   | PID.....................: %03i"),packet[15],packet[15]);
+  Log::consoleAsync(PSTR("%02X                   | PID.....................: %03i"),packet[15],packet[15]);
 
   ////////////////////////////////////////////////////////////////////////////////////////
   //AX.25 PAYLOAD
@@ -296,6 +419,6 @@ void Log::log_packet_ax25(uint8_t *packet, size_t size){
   Log::log_packet(packet_aux,size-16);
   
   }else{
-    Log::console(PSTR(" *** Length less than 16 bytes. Packet not printed ***"));
+    Log::consoleAsync(PSTR(" *** Length less than 16 bytes. Packet not printed ***"));
   }
 }

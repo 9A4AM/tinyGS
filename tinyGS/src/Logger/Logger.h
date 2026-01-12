@@ -17,14 +17,30 @@
   along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+#ifndef LOGGER_H
+#define LOGGER_H
+
 #include "Arduino.h"
+#include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
+#include <freertos/task.h>
 
 #define MAX_LOG_SIZE 4000
 #define LOG_LEVEL    LOG_LEVEL_NONE
+#define MAX_ASYNC_LOG_SIZE 320
+#define LOG_QUEUE_SIZE 30
 
 class Log {
 public:
   enum LoggingLevels {LOG_LEVEL_NONE, LOG_LEVEL_ERROR, LOG_LEVEL_INFO, LOG_LEVEL_DEBUG};
+  
+  // Asynchronous logging functions (non-blocking)
+  static void initAsync();
+  static void consoleAsync(const char* logData, ...);
+  static void errorAsync(const char* logData, ...);
+  static void debugAsync(const char* logData, ...);
+  
+  // Synchronous logging functions (blocking - legacy)
   static void console(const char* logData, ...);
   static void error(const char* logData, ...);
   static void info(const char* logData, ...);
@@ -37,9 +53,20 @@ public:
   static void log_packet_ax25(uint8_t *packet, size_t size);
   
 private:
+  struct LogMessage {
+    char message[MAX_ASYNC_LOG_SIZE];
+    LoggingLevels level;
+  };
+  
   static void AddLog(LoggingLevels logLevel, const char* logData);
+  static void AddLogAsync(LoggingLevels logLevel, const char* logData);
+  static void logTaskFunction(void* parameter);
   static size_t strchrspn(const char *str1, int character);
   static char log[MAX_LOG_SIZE];
   static char logIdx;
   static LoggingLevels logLevel;
+  static QueueHandle_t logQueue;
+  static TaskHandle_t logTask;
+  static bool asyncEnabled;
 };
+#endif // LOGGER_H

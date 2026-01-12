@@ -84,7 +84,7 @@ bool TinyGSImprov::connectWifi (std::string ssid, std::string password) {
 
         if (count > MAX_ATTEMPTS_WIFI_CONNECTION) {
             Serial.printf("Wifi status: %d\n", WiFi.status ());
-            Serial.println ("Failed to connect to wifi...");
+            Serial.println("Failed to connect to wifi...");
             WiFi.disconnect ();
             return false;
         }
@@ -98,17 +98,17 @@ bool TinyGSImprov::connectWifi (std::string ssid, std::string password) {
     strncpy (globalConfigManager->getWifiPasswordParameter ()->valueBuffer, password.c_str (), globalConfigManager->getWifiPasswordParameter ()->getLength ());
     char* stationName = globalConfigManager->getThingNameParameter ()->valueBuffer;
     int stationNameLength = globalConfigManager->getThingNameParameter ()->getLength ();
-    Serial.printf ("Station name: %s\n", stationName);
+    Serial.printf("Station name: %s\n", stationName);
     if (strncmp (stationName, "", stationNameLength) == 0) {
         strncpy (stationName, "TinyGS_Improv", stationNameLength);
-        Serial.println ("Station name was empty");
+        Serial.println("Station name was empty");
     }
     char* apPassword = globalConfigManager->getApPasswordParameter ()->valueBuffer;
     int apPasswordLength = globalConfigManager->getApPasswordParameter ()->getLength ();
-    Serial.printf ("AP password: %s\n", apPassword);
+    Serial.printf("AP password: %s\n", apPassword);
     if (strncmp (apPassword, "", apPasswordLength) == 0) {
         strncpy (apPassword, "12345678", apPasswordLength);
-        Serial.println ("AP password was empty");
+        Serial.println("AP password was empty");
     }
     globalConfigManager->saveConfig ();
     delay (100);
