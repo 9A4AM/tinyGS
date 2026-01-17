@@ -104,15 +104,11 @@ void msOverlay(OLEDDisplay *display, OLEDDisplayUiState* state)
   }
   timeinfo = localtime (&currenttime);
 
-  String thisTime="";
-  if (timeinfo->tm_hour < 10){ thisTime=thisTime + " ";} // add leading space if required
-  thisTime = String (timeinfo->tm_hour) + ":";
-  if (timeinfo->tm_min < 10) { thisTime = thisTime + "0"; } // add leading zero if required
-  thisTime = thisTime + String (timeinfo->tm_min) + ":";
-  if (timeinfo->tm_sec < 10) { thisTime = thisTime + "0"; } // add leading zero if required
-  thisTime = thisTime + String (timeinfo->tm_sec);
-  const char* newTime = (const char*) thisTime.c_str();
-  display->drawString(128, 0, newTime);
+  // Usar buffer estático para evitar fragmentación del heap
+  char timeBuffer[12];
+  snprintf(timeBuffer, sizeof(timeBuffer), "%2d:%02d:%02d", 
+           timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+  display->drawString(128, 0, timeBuffer);
 
   if (ConfigManager::getInstance().getDayNightOled())
   {

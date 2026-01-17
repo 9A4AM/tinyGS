@@ -453,24 +453,10 @@ uint8_t Radio::listen()
   {
     // store time of the last packet received:
     timeinfo = localtime(&currenttime);
-    String thisTime = "";
-    if (timeinfo->tm_hour < 10)
-    {
-      thisTime = thisTime + " ";
-    } // add leading space if required
-    thisTime = String(timeinfo->tm_hour) + ":";
-    if (timeinfo->tm_min < 10)
-    {
-      thisTime = thisTime + "0";
-    } // add leading zero if required
-    thisTime = thisTime + String(timeinfo->tm_min) + ":";
-    if (timeinfo->tm_sec < 10)
-    {
-      thisTime = thisTime + "0";
-    } // add leading zero if required
-    thisTime = thisTime + String(timeinfo->tm_sec);
-
-    status.lastPacketInfo.time = thisTime;
+    char timeBuffer[12];
+    snprintf(timeBuffer, sizeof(timeBuffer), "%2d:%02d:%02d", 
+             timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+    status.lastPacketInfo.time = timeBuffer;
   }
 
   status.lastPacketInfo.rssi = newPacketInfo.rssi;
@@ -558,6 +544,7 @@ uint8_t Radio::listen()
         size_t sizeSalida=0;              
         salida=new uint8_t[respLen];
         BitCode::pn9(respFrame,respLen,salida);
+        delete[] respFrame; // Clean up original respFrame before reassignment
         respFrame=salida;
       }
       board_t board;
@@ -751,8 +738,7 @@ int16_t Radio::remote_freq(char *payload, size_t payload_len)
 
 int16_t Radio::remoteSetFreqOffset(char *payload, size_t payload_len)
 {
-
-  DynamicJsonDocument doc(90);
+  StaticJsonDocument<96> doc;
   deserializeJson(doc, payload, payload_len);
 
   if (doc.size()==1) {
@@ -810,7 +796,7 @@ int16_t Radio::remoteSetFreqOffset(char *payload, size_t payload_len)
 
 int16_t Radio::remote_begin_lora(char *payload, size_t payload_len)
 {
-  DynamicJsonDocument doc(256);
+  StaticJsonDocument<256> doc;
   deserializeJson(doc, payload, payload_len);
   float freq = doc[0];
   float bw = doc[1];
@@ -868,7 +854,7 @@ int16_t Radio::remote_begin_lora(char *payload, size_t payload_len)
 
 int16_t Radio::remote_begin_fsk(char *payload, size_t payload_len)
 {
-  DynamicJsonDocument doc(256);
+  StaticJsonDocument<256> doc;
   deserializeJson(doc, payload, payload_len);
   float freq = doc[0];
   float br = doc[1];

@@ -867,8 +867,7 @@ void ConfigManager::parseAdvancedConf()
   if (!strlen(advancedConfig))
     return;
 
-  size_t size = 512;
-  DynamicJsonDocument doc(size);
+  StaticJsonDocument<512> doc;
   deserializeJson(doc, (const char *)advancedConfig);
 
   if (doc.containsKey(F("dmode")))
@@ -976,8 +975,7 @@ void ConfigManager::parseModemStartup()
 
 bool ConfigManager::parseBoardTemplate(board_t &board)
 {
-  size_t size = 512;
-  DynamicJsonDocument doc(size);
+  StaticJsonDocument<512> doc;
   DeserializationError error = deserializeJson(doc, ConfigManager::getInstance().getBoardTemplate());
 
   if (error.code() != DeserializationError::Ok || !doc.containsKey("radio"))

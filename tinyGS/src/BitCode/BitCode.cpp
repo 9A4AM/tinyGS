@@ -257,64 +257,48 @@ void BitCode::invierte_bytes_de_un_array(uint8_t *entrada, size_t sizeEntrada, u
 
 int BitCode::nrz2ax25(uint8_t *entrada, size_t sizeEntrada, uint8_t *ax25bin, size_t *sizeAx25bin, uint8_t framing){
 
-    char *ax25hdlc;
-    char *texto;
-    uint8_t *scrambled;
     uint8_t *ax25hdlcbin;
     uint8_t *ax25invbin;
-    uint8_t *ax25inv;
     uint8_t *nrz;
-    size_t sizeScrambled=0;
-    size_t sizeAx25inv=0;
     size_t sizeAx25invbin=0;
     size_t sizeAx25hdlcbin=0;
     size_t sizeNrz=0;
     int bitstuff=0;
-    scrambled=new uint8_t[sizeEntrada];
+    int result=1;
+    
     ax25hdlcbin = new uint8_t[sizeEntrada];
-    ax25inv=new uint8_t[sizeEntrada];
-    ax25hdlcbin=new uint8_t[sizeEntrada];
     ax25invbin=new uint8_t[sizeEntrada];
     nrz=new uint8_t[sizeEntrada];
+    
     if (sizeEntrada>=16){
 
-    if (framing==1){
-      BitCode::nrz2nrzi(entrada,sizeEntrada,ax25hdlcbin,&sizeAx25hdlcbin);
-    }
+      if (framing==1){
+        BitCode::nrz2nrzi(entrada,sizeEntrada,ax25hdlcbin,&sizeAx25hdlcbin);
+      }
 
-    if (framing==3){
-      BitCode::descram1712(entrada,sizeEntrada,nrz);
-      //Log::console(PSTR("Raw Packet - Descrambled (x17x12)"));
-      //Log::log_packet_hex(nrz,sizeEntrada);
-      sizeNrz=sizeEntrada;
-      BitCode::nrz2nrzi(nrz,sizeNrz,ax25hdlcbin,&sizeAx25hdlcbin);
-    }
+      if (framing==3){
+        BitCode::descram1712(entrada,sizeEntrada,nrz);
+        sizeNrz=sizeEntrada;
+        BitCode::nrz2nrzi(nrz,sizeNrz,ax25hdlcbin,&sizeAx25hdlcbin);
+      }
 
-    Log::console(PSTR("Decoded Packet"));
-    Log::log_packet_hex(ax25hdlcbin,sizeAx25hdlcbin);
-    bitstuff=BitCode::remove_bit_stuffing(ax25hdlcbin,sizeAx25hdlcbin,ax25invbin,&sizeAx25invbin);
-    //Log::console(PSTR("Raw Packet - No bit stuffing"));
-    //Log::log_packet_hex(ax25invbin,sizeAx25invbin);
-	  BitCode::invierte_bytes_de_un_array(ax25invbin,sizeAx25invbin,ax25bin,sizeAx25bin);	
-    
-    if (bitstuff==0){
-      return 0;	  
-	  }else{
-      return 1;
-	  }
+      Log::console(PSTR("Decoded Packet"));
+      Log::log_packet_hex(ax25hdlcbin,sizeAx25hdlcbin);
+      bitstuff=BitCode::remove_bit_stuffing(ax25hdlcbin,sizeAx25hdlcbin,ax25invbin,&sizeAx25invbin);
+      BitCode::invierte_bytes_de_un_array(ax25invbin,sizeAx25invbin,ax25bin,sizeAx25bin);	
+      
+      result = (bitstuff==0) ? 0 : 1;
 
     }else{
       Log::console(PSTR("Packet size less than 16 bytes"));
-      return 1;
+      result = 1;
     }
  
-    delete[] scrambled;
-    delete[] ax25hdlcbin;
-    delete[] ax25inv;
     delete[] ax25hdlcbin;
     delete[] ax25invbin;
     delete[] nrz;
     
+    return result;
 }
 
 /*  

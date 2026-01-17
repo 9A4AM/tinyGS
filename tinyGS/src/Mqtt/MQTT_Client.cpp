@@ -98,12 +98,14 @@ void MQTT_Client::loop()
       sendWelcome();
     else
     {
-      StaticJsonDocument<128> doc;
+      StaticJsonDocument<192> doc;
       doc["Vbat"] = voltage();
       doc["Mem"] = ESP.getFreeHeap();
-      doc["RSSI"] =WiFi.RSSI();
-      doc["radio"]= status.radio_error;
-      doc["InstRSSI"]= status.modeminfo.currentRssi;
+      doc["MinMem"] = ESP.getMinFreeHeap();    // Mínimo histórico
+      doc["MaxBlk"] = ESP.getMaxAllocHeap();   // Bloque más grande disponible
+      doc["RSSI"] = WiFi.RSSI();
+      doc["radio"] = status.radio_error;
+      doc["InstRSSI"] = status.modeminfo.currentRssi;
 
       char buffer[256];
       serializeJson(doc, buffer);
@@ -152,8 +154,12 @@ void MQTT_Client::reconnect()
         break;
       case MQTT_CONNECT_BAD_CREDENTIALS:
       case MQTT_CONNECT_UNAUTHORIZED:
-        Log::console(PSTR("MQTT authentication failure. You can check the MQTT credentials connecting to the config panel on the ip: %s."), WiFi.localIP().toString().c_str());
+      {
+        char ipBuffer[16];
+        WiFi.localIP().toString().toCharArray(ipBuffer, sizeof(ipBuffer));
+        Log::console(PSTR("MQTT authentication failure. You can check the MQTT credentials connecting to the config panel on the ip: %s."), ipBuffer);
         break;
+      }
       default:
         Log::console(PSTR("failed, rc=%i"), state());
     }
@@ -163,12 +169,37 @@ void MQTT_Client::reconnect()
 String MQTT_Client::buildTopic(const char *baseTopic, const char *cmnd)
 {
   ConfigManager &configManager = ConfigManager::getInstance();
-  String topic = baseTopic;
-  topic.replace("%user%", configManager.getMqttUser());
-  topic.replace("%station%", configManager.getThingName());
-  topic.replace("%cmnd%", cmnd);
-
-  return topic;
+  
+  // Usar buffer estático para evitar fragmentación del heap
+  static char topicBuffer[128];
+  
+  const char* user = configManager.getMqttUser();
+  const char* station = configManager.getThingName();
+  
+  // Construir el topic directamente sin usar String::replace()
+  char* p = topicBuffer;
+  const char* src = baseTopic;
+  
+  while (*src) {
+    if (strncmp(src, "%user%", 6) == 0) {
+      strcpy(p, user);
+      p += strlen(user);
+      src += 6;
+    } else if (strncmp(src, "%station%", 9) == 0) {
+      strcpy(p, station);
+      p += strlen(station);
+      src += 9;
+    } else if (strncmp(src, "%cmnd%", 6) == 0) {
+      strcpy(p, cmnd);
+      p += strlen(cmnd);
+      src += 6;
+    } else {
+      *p++ = *src++;
+    }
+  }
+  *p = '\0';
+  
+  return String(topicBuffer);
 }
 
 void MQTT_Client::subscribeToAll()
@@ -759,8 +790,7 @@ void MQTT_Client::manageMQTTData(char *topic, uint8_t *payload, unsigned int len
 
 void MQTT_Client::manageSetPosParameters(char *payload, size_t payload_len)
 {
-
-  DynamicJsonDocument doc(90);
+  StaticJsonDocument<96> doc;
   deserializeJson(doc, payload, payload_len);
   if (doc.size()==1) {
     status.tle.tgsALT = doc[0];
@@ -804,7 +834,7 @@ void MQTT_Client::manageSetPosParameters(char *payload, size_t payload_len)
 
 void MQTT_Client::manageSetName(char *payload, size_t payload_len)
 {
-  DynamicJsonDocument doc(128);
+  StaticJsonDocument<128> doc;
   DeserializationError error = deserializeJson(doc, payload, payload_len);
 
   if (error) {
@@ -851,7 +881,7 @@ void MQTT_Client::manageSetName(char *payload, size_t payload_len)
 
 void MQTT_Client::manageSatPosOled(char *payload, size_t payload_len)
 {
-  DynamicJsonDocument doc(60);
+  StaticJsonDocument<64> doc;
   deserializeJson(doc, payload, payload_len);
   status.satPos[0] = doc[0];
   status.satPos[1] = doc[1];
@@ -859,7 +889,7 @@ void MQTT_Client::manageSatPosOled(char *payload, size_t payload_len)
 
 void MQTT_Client::remoteSatCmnd(char *payload, size_t payload_len)
 {
-  DynamicJsonDocument doc(256);
+  StaticJsonDocument<256> doc;
   deserializeJson(doc, payload, payload_len);
   strcpy(status.modeminfo.satellite, doc[0]);
   uint32_t NORAD = doc[1];
@@ -870,7 +900,7 @@ void MQTT_Client::remoteSatCmnd(char *payload, size_t payload_len)
 
 void MQTT_Client::remoteSatFilter(char *payload, size_t payload_len)
 {
-  DynamicJsonDocument doc(256);
+  StaticJsonDocument<256> doc;
   deserializeJson(doc, payload, payload_len);
   uint8_t filter_size = doc.size();
 
@@ -891,7 +921,7 @@ void MQTT_Client::remoteSatFilter(char *payload, size_t payload_len)
 void MQTT_Client::remoteGoToSleep(char *payload, size_t payload_len)
 {
   Radio &radio = Radio::getInstance();
-  DynamicJsonDocument doc(60);
+  StaticJsonDocument<64> doc;
   deserializeJson(doc, payload, payload_len);
 
   uint32_t sleep_seconds = doc[0];                        // max 
@@ -914,7 +944,7 @@ void MQTT_Client::remoteGoToSleep(char *payload, size_t payload_len)
 
 void MQTT_Client::remoteGoToSiesta(char *payload, size_t payload_len)
 {
-  DynamicJsonDocument doc(60);
+  StaticJsonDocument<64> doc;
   deserializeJson(doc, payload, payload_len);
 
   uint32_t sleep_seconds = doc[0];                        // max 
