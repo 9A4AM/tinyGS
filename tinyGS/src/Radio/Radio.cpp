@@ -627,7 +627,7 @@ uint8_t Radio::listen()
     }
 
 //    status.lastPacketInfo.crc_error = false;
-    MQTT_Client::getInstance().sendRx(base64::encode(respFrame, respLen), noisyInterrupt, base64::encode(respFrame_raw, respLenRaw));
+    MQTT_Client::getInstance().queueRx(base64::encode(respFrame, respLen), noisyInterrupt, base64::encode(respFrame_raw, respLenRaw));
   }
   else if (state == RADIOLIB_ERR_CRC_MISMATCH || status.lastPacketInfo.crc_error )
   {
@@ -637,7 +637,7 @@ uint8_t Radio::listen()
     // if filter is active, filter the CRC errors
     if (status.modeminfo.filter[0] == 0)
     {
-      MQTT_Client::getInstance().sendRx(base64::encode("Error_CRC"), noisyInterrupt, base64::encode(respFrame_raw, respLenRaw));
+      MQTT_Client::getInstance().queueRx(base64::encode("Error_CRC"), noisyInterrupt, base64::encode(respFrame_raw, respLenRaw));
     }
     else
     {

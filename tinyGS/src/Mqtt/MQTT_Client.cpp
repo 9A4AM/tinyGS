@@ -38,6 +38,12 @@ espClient.setCACert(newRoot_CA);
 #endif
   randomTime = random(randomTimeMax - randomTimeMin) + randomTimeMin;
   radioConfigMutex = xSemaphoreCreateMutex();
+  
+  // Crear cola de paquetes RX para envío asíncrono (burst de imágenes FSK)
+  rxQueue = xQueueCreate(RX_QUEUE_SIZE, sizeof(RxPacketMessage));
+  if (rxQueue == NULL) {
+    Log::console(PSTR("ERROR: Failed to create RX packet queue"));
+  }
 }
 
 void MQTT_Client::loop()
@@ -89,6 +95,9 @@ void MQTT_Client::loop()
   }
 
   PubSubClient::loop();
+
+  // Procesar cola de paquetes RX pendientes (para burst de imágenes FSK)
+  processRxQueue();
 
   unsigned long now = millis();
   if (now - lastPing > pingInterval && connected())
@@ -319,6 +328,160 @@ void MQTT_Client::sendRx(String packet, bool noisy, String raw_packet)
   publish(buildTopic(teleTopic, topicRx).c_str(), buffer, false);
   
   free(buffer);
+}
+
+// Versión de sendRx que usa la info guardada en la cola
+// Esto evita problemas si la configuración cambió entre encolar y enviar
+void MQTT_Client::sendRxFromQueue(const RxPacketMessage& msg)
+{
+  ConfigManager &configManager = ConfigManager::getInstance();
+  time_t now;
+  time(&now);
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+
+  size_t packetLen = strlen(msg.packet);
+  size_t rawLen = strlen(msg.raw_packet);
+  
+  const size_t capacity = JSON_ARRAY_SIZE(2) + JSON_OBJECT_SIZE(24) + 256 + packetLen + rawLen;
+  DynamicJsonDocument doc(capacity);
+  JsonArray station_location = doc.createNestedArray("station_location");
+  station_location.add(configManager.getLatitude());
+  station_location.add(configManager.getLongitude());
+  doc["mode"] = msg.modem_mode;
+  doc["frequency"] = msg.frequency;
+  doc["frequency_offset"] = msg.freqOffset;
+  if (msg.freqDoppler != 0) doc["f_doppler"] = msg.freqDoppler;
+ 
+  doc["satellite"] = msg.satellite;
+  
+  if (strcmp(msg.modem_mode, "LoRa") == 0)
+  {
+    doc["sf"] = msg.sf;
+    doc["cr"] = msg.cr;
+    doc["bw"] = msg.bw;
+    doc["iIQ"] = msg.iIQ;
+  }
+  else
+  {
+    doc["bitrate"] = msg.bitrate;
+    doc["freqdev"] = msg.freqDev;
+    doc["rxBw"] = msg.bw;
+    doc["data_raw"] = msg.raw_packet;
+  }
+
+  doc["rssi"] = msg.rssi;
+  doc["snr"] = msg.snr;
+  doc["frequency_error"] = msg.frequencyerror;
+  doc["unix_GS_time"] = now;
+  doc["usec_time"] = (int64_t)tv.tv_usec + tv.tv_sec * 1000000ll;
+  doc["crc_error"] = msg.crc_error;
+  doc["data"] = msg.packet;
+  doc["NORAD"] = msg.NORAD;
+  doc["noisy"] = msg.noisy;
+
+  size_t bufferSize = measureJson(doc) + 1;
+  char* buffer = (char*)malloc(bufferSize);
+  if (buffer == nullptr) {
+    Log::error(PSTR("sendRxFromQueue: Failed to allocate buffer (%u bytes)"), bufferSize);
+    return;
+  }
+  
+  serializeJson(doc, buffer, bufferSize);
+  Log::debugAsync(PSTR("%s"), buffer);
+  publish(buildTopic(teleTopic, topicRx).c_str(), buffer, false);
+  
+  free(buffer);
+}
+
+// Encolar paquete para envío asíncrono (no bloquea la recepción de radio)
+// Guarda copia de la info del modem AL MOMENTO DE RECIBIR para evitar
+// problemas si la configuración cambia antes de enviar por MQTT
+void MQTT_Client::queueRx(const String& packet, bool noisy, const String& raw_packet)
+{
+  if (rxQueue == NULL) {
+    // Fallback: enviar directamente si no hay cola
+    sendRx(packet, noisy, raw_packet);
+    return;
+  }
+  
+  RxPacketMessage msg;
+  msg.noisy = noisy;
+  
+  // Copiar info del modem AL MOMENTO DE RECIBIR (solo campos necesarios)
+  strncpy(msg.modem_mode, status.modeminfolastpckt.modem_mode, sizeof(msg.modem_mode) - 1);
+  msg.modem_mode[sizeof(msg.modem_mode) - 1] = '\0';
+  strncpy(msg.satellite, status.modeminfolastpckt.satellite, sizeof(msg.satellite) - 1);
+  msg.satellite[sizeof(msg.satellite) - 1] = '\0';
+  msg.frequency = status.modeminfolastpckt.frequency;
+  msg.freqOffset = status.modeminfolastpckt.freqOffset;
+  msg.NORAD = status.modeminfolastpckt.NORAD;
+  msg.sf = status.modeminfolastpckt.sf;
+  msg.cr = status.modeminfolastpckt.cr;
+  msg.bw = status.modeminfolastpckt.bw;
+  msg.iIQ = status.modeminfolastpckt.iIQ;
+  msg.bitrate = status.modeminfolastpckt.bitrate;
+  msg.freqDev = status.modeminfolastpckt.freqDev;
+  
+  // Info del paquete
+  msg.rssi = status.lastPacketInfo.rssi;
+  msg.snr = status.lastPacketInfo.snr;
+  msg.frequencyerror = status.lastPacketInfo.frequencyerror;
+  msg.freqDoppler = status.lastPacketInfo.freqDoppler;
+  msg.crc_error = status.lastPacketInfo.crc_error;
+  
+  // Copiar strings de datos (truncar si es necesario)
+  size_t packetLen = packet.length();
+  size_t rawLen = raw_packet.length();
+  
+  if (packetLen >= sizeof(msg.packet)) {
+    Log::debugAsync(PSTR("Warning: packet truncated from %u to %u"), packetLen, sizeof(msg.packet) - 1);
+    packetLen = sizeof(msg.packet) - 1;
+  }
+  if (rawLen >= sizeof(msg.raw_packet)) {
+    Log::debugAsync(PSTR("Warning: raw_packet truncated from %u to %u"), rawLen, sizeof(msg.raw_packet) - 1);
+    rawLen = sizeof(msg.raw_packet) - 1;
+  }
+  
+  memcpy(msg.packet, packet.c_str(), packetLen);
+  msg.packet[packetLen] = '\0';
+  
+  memcpy(msg.raw_packet, raw_packet.c_str(), rawLen);
+  msg.raw_packet[rawLen] = '\0';
+  
+  // Intentar encolar sin bloquear (timeout = 0)
+  if (xQueueSend(rxQueue, &msg, 0) != pdTRUE) {
+    // Cola llena - descartar paquete más antiguo e intentar de nuevo
+    RxPacketMessage discarded;
+    xQueueReceive(rxQueue, &discarded, 0);
+    if (xQueueSend(rxQueue, &msg, 0) == pdTRUE) {
+      Log::debugAsync(PSTR("RX queue full, oldest packet discarded"));
+    } else {
+      Log::debugAsync(PSTR("RX queue error, packet lost"));
+    }
+  }
+}
+
+// Procesar cola de paquetes pendientes (llamada desde loop)
+void MQTT_Client::processRxQueue()
+{
+  if (rxQueue == NULL || !connected())
+    return;
+  
+  RxPacketMessage msg;
+  
+  // Procesar hasta 2 paquetes por ciclo para no bloquear demasiado tiempo
+  int processed = 0;
+  while (processed < 2 && xQueueReceive(rxQueue, &msg, 0) == pdTRUE) {
+    sendRxFromQueue(msg);
+    processed++;
+  }
+  
+  // Debug: mostrar estado de la cola si hay paquetes pendientes
+  UBaseType_t pending = uxQueueMessagesWaiting(rxQueue);
+  if (pending > 0) {
+    Log::debugAsync(PSTR("RX queue: %u packets pending"), pending);
+  }
 }
 
 void MQTT_Client::sendStatus()

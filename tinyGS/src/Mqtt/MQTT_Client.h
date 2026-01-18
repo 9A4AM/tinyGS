@@ -27,6 +27,38 @@
 #include <PubSubClient.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
+#include <freertos/queue.h>
+
+// Estructura optimizada para cola de paquetes RX no bloqueante
+// Solo guarda los campos necesarios para reconstruir el mensaje MQTT
+// Base64: ceil(256/3)*4 = 344 chars + null = 345 bytes, redondeamos a 360
+struct RxPacketMessage {
+  char packet[360];           // Base64 encoded packet
+  char raw_packet[360];       // Base64 encoded raw packet  
+  bool noisy;
+  // Info del modem (solo campos necesarios para el JSON)
+  char modem_mode[8];
+  char satellite[25];
+  float frequency;
+  float freqOffset;
+  uint32_t NORAD;
+  // LoRa específicos
+  uint8_t sf;
+  uint8_t cr;
+  float bw;
+  bool iIQ;
+  // FSK específicos
+  float bitrate;
+  float freqDev;
+  // Info del paquete
+  float rssi;
+  float snr;
+  float frequencyerror;
+  float freqDoppler;
+  bool crc_error;
+};
+// Tamaño total: ~820 bytes x 10 = ~8.2KB (vs ~1KB x 10 con estructuras completas)
+
 #if MQTT_MAX_PACKET_SIZE != 1000  && !PLATFORMIO
 #error "Using Arduino IDE is not recommended, please follow this guide https://github.com/G4lile0/tinyGS/wiki/Arduino-IDE or edit /PubSubClient/src/PubSubClient.h  and set #define MQTT_MAX_PACKET_SIZE 1000"
 #endif
@@ -49,7 +81,8 @@ public:
   void begin();
   void loop();
   void sendWelcome();
-  void sendRx(String packet, bool noisy, String raw_packet);
+  void sendRx(String packet, bool noisy, String raw_packet);  // Solo usado como fallback
+  void queueRx(const String& packet, bool noisy, const String& raw_packet);
   void manageMQTTData(char *topic, uint8_t *payload, unsigned int length);
   void sendStatus ();
   void sendAdvParameters ();
@@ -76,11 +109,15 @@ private:
   void remoteSatFilter(char* payload, size_t payload_len);
   void remoteGoToSleep(char* payload, size_t payload_len);
   void remoteGoToSiesta(char* payload, size_t payload_len);
+  void processRxQueue();
+  void sendRxFromQueue(const RxPacketMessage& msg);  // Envía paquete desde la cola
 
   int  voltage();
   
   //bool usingNewCert = true;
   SemaphoreHandle_t radioConfigMutex;
+  QueueHandle_t rxQueue;
+  static const int RX_QUEUE_SIZE = 10;  // Cola de hasta 10 paquetes
   unsigned long lastPing = 0;
   unsigned long lastConnectionAtempt = 0;
   uint8_t connectionAtempts = 0;
