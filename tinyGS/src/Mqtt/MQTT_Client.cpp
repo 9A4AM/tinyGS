@@ -315,7 +315,7 @@ void MQTT_Client::sendRx(String packet, bool noisy, String raw_packet)
   }
   
   serializeJson(doc, buffer, bufferSize);
-  Log::debug(PSTR("%s"), buffer);
+  Log::debugAsync(PSTR("%s"), buffer);
   publish(buildTopic(teleTopic, topicRx).c_str(), buffer, false);
   
   free(buffer);

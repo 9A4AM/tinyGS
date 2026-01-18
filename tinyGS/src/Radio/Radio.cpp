@@ -278,7 +278,7 @@ if (status.modeminfo.tle[0] != 0)
 
   //Serial.printf("\r\nSun -> Lat: %.4f Lon: %.4f (MAP %dx%d: x = %d,y = %d) Az: %.2f El: %.2f\r\n\r\n", dSunLAT, dSunLON, MAP_MAXX, MAP_MAXY, ixSUN, iySUN, dSunAZ, dSunEL);
 
-  Log::debug(PSTR("Doppler -> New: %.2f Hz Old: %.2f Hz  Dif: %.2f Hz"),  status.tle.new_freqDoppler, status.tle.freqDoppler, abs( status.tle.new_freqDoppler- status.tle.freqDoppler) );
+  Log::debugAsync(PSTR("Doppler -> New: %.2f Hz Old: %.2f Hz  Dif: %.2f Hz"),  status.tle.new_freqDoppler, status.tle.freqDoppler, abs( status.tle.new_freqDoppler- status.tle.freqDoppler) );
   if(status.tle.dSatEL > 0) // oe6isp
   {
 	if (abs( status.tle.new_freqDoppler- status.tle.freqDoppler) >  status.tle.freqTol) {
@@ -342,7 +342,7 @@ void Radio::startRx()
 void Radio::setFrequency()
 {
   // get current RSSI
-  Log::debug(PSTR("Base: %.4f Mhz Offset: %.1f Hz Doppler: %.1f Hz "),status.modeminfo.frequency, status.modeminfo.freqOffset,status.tle.freqDoppler);
+  Log::debugAsync(PSTR("Base: %.4f Mhz Offset: %.1f Hz Doppler: %.1f Hz "),status.modeminfo.frequency, status.modeminfo.freqOffset,status.tle.freqDoppler);
   begin();
   //radioHal->setFrequency( (status.modeminfo.frequency * 1000000 + (status.modeminfo.freqOffset +  status.tle.freqDoppler)) / 1000000);
   //Log::debug(PSTR("Base: %.4f Mhz Offset: %.1f Hz Doppler: %.1f Hz --> Modem: %.4f Mhz"),status.modeminfo.frequency, status.modeminfo.freqOffset,status.tle.freqDoppler,(status.modeminfo.frequency * 1000000 + (status.modeminfo.freqOffset +  status.tle.freqDoppler)) / 1000000);
