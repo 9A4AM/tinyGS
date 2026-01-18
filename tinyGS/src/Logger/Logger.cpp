@@ -203,7 +203,25 @@ void Log::AddLog(Log::LoggingLevels level, const char* logData)
       timeStr[0] = '\0';
   }
   
-  Serial.printf (PSTR ("%s%s\n"), timeStr, logData);
+  // Serial no bloqueante - verificar espacio disponible antes de escribir
+  size_t timeLen = strlen(timeStr);
+  size_t dataLen = strlen(logData);
+  size_t totalLen = timeLen + dataLen + 1;  // +1 para '\n'
+  size_t available = Serial.availableForWrite();
+  
+  if (available >= totalLen) {
+    // Hay espacio suficiente - escribir todo
+    Serial.print(timeStr);
+    Serial.println(logData);
+  } else if (available > timeLen + 10) {
+    // Espacio parcial - escribir timestamp + lo que quepa del mensaje (truncado)
+    Serial.print(timeStr);
+    size_t toWrite = available - timeLen - 4;  // -4 para "...\n"
+    Serial.write((const uint8_t*)logData, toWrite);
+    Serial.println("...");
+  }
+  // Si no hay espacio suficiente, no escribimos al Serial
+  // El log se guarda igualmente en el buffer interno para la web
 
   // Delimited, zero-terminated buffer of log lines.
   // Each entry has this format: [index][log data]['\1']
