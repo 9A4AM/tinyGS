@@ -17,7 +17,7 @@
   along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#include "ConfigManager.h"
+#include "./ConfigManager.h"
 #include "../Mqtt/MQTT_Client.h"
 #include "../Logger/Logger.h"
 #include "../Radio/Radio.h"
@@ -49,7 +49,7 @@ na   SX1281    2.4–2.5Ghz  130       5.5            2000         0.476-202    
 */
 
 ConfigManager::ConfigManager()
-    : IotWebConf2(thingName, &dnsServer, &server, initialApPassword, configVersion), server(80), gsConfigHtmlFormatProvider(*this), boards({
+    : IotWebConf2(thingName, &dnsServer, &server, initialApPassword, configVersion), server(80), gsConfigHtmlFormatProvider(*this), boards{
   //OLED_add, OLED_SDA,  OLED_SCL, OLED_RST, PROG_BUTTON, BOARD_LED,      L_SX127X?,   L_NSS, L_DI00, L_DI01, L_BUSSY, L_RST,  L_MISO, L_MOSI, L_SCK, L_TCXO_V, RX_EN, TX_EN,   BOARD
 #if CONFIG_IDF_TARGET_ESP32S3
   {      0x3c,       17,        18,       21,           0,        35,      RADIO_SX1262,    8,   UNUSED,   14,      13,   12,      11,     10,     9,     1.6f,   UNUSED, UNUSED, "150–960Mhz - HELTEC LORA32 V3 SX1262"    },  // SX1262
@@ -86,7 +86,7 @@ ConfigManager::ConfigManager()
   
 
  #endif
-  })
+  }
 {
   server.on(ROOT_URL, [this] { handleRoot(); });
   server.on(LOGO_URL, [this] { handleImage(LOGO_PNG, sizeof(LOGO_PNG)); });
@@ -399,7 +399,13 @@ void ConfigManager::handleRefreshConsole()
   {
     counter = atoi(stmp);
   }
+
+#if CONFIG_IDF_TARGET_ESP32
   server.client().flush();
+#else
+  server.client().clear();
+#endif
+
   server.sendHeader(F("Cache-Control"), F("no-cache, no-store, must-revalidate"));
   server.sendHeader(F("Pragma"), F("no-cache"));
   server.sendHeader(F("Expires"), F("-1"));
@@ -451,7 +457,11 @@ void ConfigManager::handleRefreshWorldmap()
     }
   }
 
+#if CONFIG_IDF_TARGET_ESP32
   server.client().flush();
+#else
+  server.client().clear();
+#endif
   server.sendHeader(F("Cache-Control"), F("no-cache, no-store, must-revalidate"));
   server.sendHeader(F("Pragma"), F("no-cache"));
   server.sendHeader(F("Expires"), F("-1"));
