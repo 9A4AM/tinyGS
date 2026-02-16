@@ -400,10 +400,10 @@ void ConfigManager::handleRefreshConsole()
     counter = atoi(stmp);
   }
 
-#if CONFIG_IDF_TARGET_ESP32
-  server.client().flush();
-#else
+#if CONFIG_IDF_TARGET_ESP32S3  
   server.client().clear();
+#else
+  server.client().flush();
 #endif
 
   server.sendHeader(F("Cache-Control"), F("no-cache, no-store, must-revalidate"));
@@ -457,10 +457,10 @@ void ConfigManager::handleRefreshWorldmap()
     }
   }
 
-#if CONFIG_IDF_TARGET_ESP32
-  server.client().flush();
-#else
+#if CONFIG_IDF_TARGET_ESP32S3  
   server.client().clear();
+#else
+  server.client().flush();
 #endif
   server.sendHeader(F("Cache-Control"), F("no-cache, no-store, must-revalidate"));
   server.sendHeader(F("Pragma"), F("no-cache"));
