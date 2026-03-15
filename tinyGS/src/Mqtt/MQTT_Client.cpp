@@ -805,13 +805,14 @@ void MQTT_Client::manageMQTTData(char *topic, uint8_t *payload, unsigned int len
     if ((doc.containsKey("tle") && doc["tle"].is<const char*>()) || (doc.containsKey("tlx") && doc["tlx"].is<const char*>())) {
     
     const char* base64Tle = nullptr;
-    
+
     if (doc.containsKey("tle")) { 
         base64Tle = doc["tle"].as<const char*>();
         status.tle.freqComp = true;
     } else {
         base64Tle = doc["tlx"].as<const char*>();
         status.tle.freqComp = false;
+        status.tle.freqDoppler = 0;
      }
 
     size_t inputLen = strlen(base64Tle);
