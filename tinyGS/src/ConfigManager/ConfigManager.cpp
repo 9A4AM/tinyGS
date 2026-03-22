@@ -44,6 +44,7 @@ na   SX1277    137–1020    158       11              300           1.7–40   
 na   SX1279    137–960     168       11              300          0.018–40           -148              +20
 na   SX1261    150–960     163       4.6             300         0.018–62.5          -148              +15
 na   SX1281    2.4–2.5Ghz  130       5.5            2000         0.476-202           -132              +12.5
+10   LR1121    150–960     163       4.6             300         0.018–62.5          -148              +15
 
 
 */
@@ -55,8 +56,10 @@ ConfigManager::ConfigManager()
   {      0x3c,       17,        18,       21,           0,        35,      RADIO_SX1262,    8,   UNUSED,   14,      13,   12,      11,     10,     9,     1.6f,   UNUSED, UNUSED, "150–960Mhz - HELTEC LORA32 V3 SX1262"    },  // SX1262
   {      0x3c,       17,        18,     UNUSED,         0,        35,      RADIO_SX1278,    8,      6,     14,   UNUSED,  12,      11,     10,     9,     0.0f,   UNUSED, UNUSED, "Custom ESP32-S3 433MHz SX1278"     },  // SX1278 @g4lile0
   {      0x3c,       17,        18,     UNUSED,         0,         3,      RADIO_SX1262,   10,   UNUSED,    1,       4,    5,      13,     11,    12,     1.6f,   UNUSED, UNUSED, "433 Mhz TTGO T-Beam Sup SX1262 V1.0"    }, // SX1268 @ Stephen
+  {      0x3c,       18,        17,       21,           0,        35,      RADIO_LR1121,    8,   UNUSED,   14,      13,   12,      11,     10,     9,     1.8f,   UNUSED, UNUSED, "EBYTE EoRa-HUB ESP32S3 + LR1121"    }, // LR1121 @ G4lile0
   {      0x3c,       17,        18,     UNUSED,         0,        37,      RADIO_SX1280,    7,   UNUSED,    9,   UNUSED,   8,       3,      6,     5,     0.0f,       21,     10, "2.4Ghz LILYGO SX1280"    }, // SX1280 @ K4KDR
-#elif CONFIG_IDF_TARGET_ESP32C3
+
+  #elif CONFIG_IDF_TARGET_ESP32C3
   {      0x3c,        0,        1,       UNUSED,        20,       21,      RADIO_SX1262,    8,   UNUSED,    3,      4,     5,       6,      7,    10,     1.6f,    UNUSED, UNUSED, "433MHz HELTEC LORA32 HT-CT62 SX1262" },  // SX1262  @gargomoma
   {      0x3c,        0,        1,       UNUSED,        20,       21,      RADIO_SX1278,    8,     4,   UNUSED,  UNUSED,   5,       6,      7,    10,     0.0f,    UNUSED, UNUSED, "Custom ESP32-C3 433MHz SX1278"     },  // SX1278 @gargomoma
 #else
