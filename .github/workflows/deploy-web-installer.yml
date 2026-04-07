@@ -146,10 +146,12 @@ jobs:
 
           # Insert new <option> after the <optgroup label="Release"> line
           # Uses the same format as existing entries
-          NEW_OPTION="      <option data-manifest=\"/bin/${DIR}/manifest.json\"\n        data-ethernet=\"/bin/${DIR}/manifest.json\"\n        value=\"${TAG}\">${TAG}</option>"
+          NEW_OPTION="      <option data-manifest=\"/bin/${DIR}/manifest.json\"\n        data-ethernet=\"/bin/${DIR}/manifest.json\"\n        value=\"${TAG}\" selected>${TAG}</option>"
 
           # Only insert if not already present
           if ! grep -q "${DIR}" "$INDEX"; then
+            # Remove any existing 'selected' attribute from other options first
+            sed -i 's/ selected / /g; s/ selected>//g; s/ selected$//g' "$INDEX"
             sed -i "s|<optgroup label=\"Release\">|<optgroup label=\"Release\">\n${NEW_OPTION}|" "$INDEX"
             echo "Inserted option for ${TAG} into index.html"
           else
